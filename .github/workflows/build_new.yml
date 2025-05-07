@@ -1,4 +1,4 @@
-name: Compile OpenSSL For Android New
+name: Compile OpenSSL and Stunnel For Android
 
 on:
   workflow_dispatch:
@@ -6,12 +6,13 @@ on:
     branches: [ master ]
 
 env:
-  OPENSSL_VERSION: 3.5.0
+  OPENSSL_VERSION: 3.3.2
+  STUNNEL_VERSION: 5.74
   WORK_PATH: /home/runner/work/openssl_for_android/openssl_for_android
 
 jobs:
-  Compile_OpenSSL_for_Android:
-    name: Compile OpenSSL
+  Compile_OpenSSL_and_stunnel_for_Android:
+    name: Compile OpenSSL and Stunnel
     runs-on: ubuntu-latest
 
     strategy:
@@ -23,7 +24,7 @@ jobs:
           - '{ "ANDROID_TARGET_ABI": "riscv64",     "ANDROID_TARGET_API": "35",  "ANDROID_NDK": "r27c"}'
           - '{ "ANDROID_TARGET_ABI": "x86",         "ANDROID_TARGET_API": "21",  "ANDROID_NDK": "r27c"}'
           - '{ "ANDROID_TARGET_ABI": "x86_64",      "ANDROID_TARGET_API": "21",  "ANDROID_NDK": "r27c"}'
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@main
@@ -32,7 +33,7 @@ jobs:
         run: |
           sudo apt -yqq update
           sudo apt install -yqq aria2
-      
+
       - name: Download Android NDK
         id: download_ndk
         run: |
@@ -47,18 +48,44 @@ jobs:
           tar -zxvf openssl-${{env.OPENSSL_VERSION}}.tar.gz
           echo "::set-output name=status::success"
 
-      - name: Compile
-        id: compile
+      - name: Compile OpenSSL
+        id: compile_openssl
         if: steps.download_ndk.outputs.status == 'success' && steps.download_openssl.outputs.status == 'success' && !cancelled()
         run: |
           bash ./openssl_build_new.sh ${{fromJSON(matrix.info).ANDROID_TARGET_API}} ${{fromJSON(matrix.info).ANDROID_TARGET_ABI}} ${{env.OPENSSL_VERSION}} ${{fromJSON(matrix.info).ANDROID_NDK}}
           echo "::set-output name=status::success"
 
+      - name: Download Stunnel
+        id: download_stunnel
+        run: |
+          aria2c -o stunnel-${{env.STUNNEL_VERSION}}.tar.gz https://codeload.github.com/mtrojnar/stunnel/tar.gz/refs/tags/stunnel-${{env.STUNNEL_VERSION}}
+          tar -zxvf stunnel-${{env.STUNNEL_VERSION}}.tar.gz
+          echo "::set-output name=status::success"
+
+      - name: Compile Stunnel
+        id: compile_stunnel
+        if: steps.download_stunnel.outputs.status == 'success' && steps.compile_openssl.outputs.status == 'success' && !cancelled()
+        run: |
+          # Navigate to the stunnel directory
+          cd stunnel-${{env.STUNNEL_VERSION}}
+
+          # Configure stunnel with OpenSSL
+          ./configure --host=arm-linux-androideabi --prefix=$WORK_PATH/stunnel_${{env.STUNNEL_VERSION}}_android \
+                      --with-openssl=$WORK_PATH/openssl-${{env.OPENSSL_VERSION}} \
+                      CC=${{fromJSON(matrix.info).ANDROID_NDK}}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang \
+                      CXX=${{fromJSON(matrix.info).ANDROID_NDK}}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++
+
+          # Build stunnel
+          make -j$(nproc)
+          make install
+
+          echo "::set-output name=status::success"
+
       - name: Generate release tag
         id: tag
         run: |
-          tar -zcvf OpenSSL_${{env.OPENSSL_VERSION}}_${{fromJSON(matrix.info).ANDROID_TARGET_ABI}}.tar.gz openssl_${{env.OPENSSL_VERSION}}_${{fromJSON(matrix.info).ANDROID_TARGET_ABI}}
-          echo "::set-output name=release_tag::${{env.OPENSSL_VERSION}}"
+          tar -zcvf stunnel_${{env.STUNNEL_VERSION}}_${{fromJSON(matrix.info).ANDROID_TARGET_ABI}}.tar.gz stunnel_${{env.STUNNEL_VERSION}}_android
+          echo "::set-output name=release_tag::stunnel-${{env.STUNNEL_VERSION}}"
           echo "::set-output name=status::success"
       
       - name: Upload firmware to release
@@ -68,11 +95,12 @@ jobs:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
         with:
           tag_name: ${{steps.tag.outputs.release_tag}}
-          files: ${{env.WORK_PATH}}/OpenSSL_${{env.OPENSSL_VERSION}}_${{fromJSON(matrix.info).ANDROID_TARGET_ABI}}.tar.gz
-
+          files: |
+            ${{env.WORK_PATH}}/OpenSSL_${{env.OPENSSL_VERSION}}_${{fromJSON(matrix.info).ANDROID_TARGET_ABI}}.tar.gz
+            ${{env.WORK_PATH}}/stunnel_${{env.STUNNEL_VERSION}}_${{fromJSON(matrix.info).ANDROID_TARGET_ABI}}.tar.gz
 
   Delete_Workflow:
-    needs: [ Compile_OpenSSL_for_Android ]
+    needs: [ Compile_OpenSSL_and_stunnel_for_Android ]
     runs-on: ubuntu-latest
     steps:
       - name: Delete workflow runs
