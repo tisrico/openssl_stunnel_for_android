@@ -60,24 +60,33 @@ jobs:
           mv stunnel-stunnel-${{env.STUNNEL_VERSION}} stunnel-${{env.STUNNEL_VERSION}}
           echo "::set-output name=status::success"
 
-      - name: Compile Stunnel
-        id: compile_stunnel
-        if: steps.download_stunnel.outputs.status == 'success' && steps.compile_openssl.outputs.status == 'success' && !cancelled()
-        run: |
-          # Navigate to the stunnel directory
-          cd stunnel-${{env.STUNNEL_VERSION}}
+     - name: Compile Stunnel
+      id: compile_stunnel
+      if: steps.download_stunnel.outputs.status == 'success' && steps.compile_openssl.outputs.status == 'success' && !cancelled()
+      env:
+        ANDROID_NDK: ${{ fromJSON(matrix.info).ANDROID_NDK }}
+      run: |
+        cd stunnel-${{ env.STUNNEL_VERSION }}
 
-          # Configure stunnel with OpenSSL
-          ./configure --host=arm-linux-androideabi --prefix=$WORK_PATH/stunnel_${{env.STUNNEL_VERSION}}_android \
-                      --with-openssl=$WORK_PATH/openssl-${{env.OPENSSL_VERSION}} \
-                      CC=${{fromJSON(matrix.info).ANDROID_NDK}}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang \
-                      CXX=${{fromJSON(matrix.info).ANDROID_NDK}}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++
+        export CC=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang
+        export CXX=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++
 
-          # Build stunnel
-          make -j$(nproc)
-          make install
+        ./configure \
+            --host=arm-linux-androideabi \
+            --prefix=/usr/local/stunnel \
+            --disable-fips \
+            --disable-systemd \
+            --disable-libwrap \
+            --enable-static \
+            --disable-shared \
+            --with-ssl=/usr/local/ssl \
+            CFLAGS="-O2" \
+            LDFLAGS="-static"
 
-          echo "::set-output name=status::success"
+        make -j$(nproc)
+        make install
+
+        echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Generate release tag
         id: tag
