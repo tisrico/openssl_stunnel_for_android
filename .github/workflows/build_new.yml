@@ -57,6 +57,7 @@ jobs:
         run: |
           aria2c -o stunnel-${{env.STUNNEL_VERSION}}.tar.gz https://codeload.github.com/mtrojnar/stunnel/tar.gz/refs/tags/stunnel-${{env.STUNNEL_VERSION}}
           tar -zxvf stunnel-${{env.STUNNEL_VERSION}}.tar.gz
+          mv stunnel-stunnel-${{env.STUNNEL_VERSION}} stunnel-${{env.STUNNEL_VERSION}}
           echo "::set-output name=status::success"
 
       - name: Compile Stunnel
@@ -64,10 +65,7 @@ jobs:
         if: steps.download_stunnel.outputs.status == 'success' && steps.compile_openssl.outputs.status == 'success' && !cancelled()
         run: |
           # Navigate to the stunnel directory
-          pwd
-          ls
-          cd stunnel*
-          # cd stunnel-${{env.STUNNEL_VERSION}}
+          cd stunnel-${{env.STUNNEL_VERSION}}
 
           # Configure stunnel with OpenSSL
           ./configure --host=arm-linux-androideabi --prefix=$WORK_PATH/stunnel_${{env.STUNNEL_VERSION}}_android \
