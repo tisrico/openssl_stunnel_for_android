@@ -60,33 +60,29 @@ jobs:
           mv stunnel-stunnel-${{env.STUNNEL_VERSION}} stunnel-${{env.STUNNEL_VERSION}}
           echo "::set-output name=status::success"
 
-     - name: Compile Stunnel
-      id: compile_stunnel
-      if: steps.download_stunnel.outputs.status == 'success' && steps.compile_openssl.outputs.status == 'success' && !cancelled()
-      env:
-        ANDROID_NDK: ${{ fromJSON(matrix.info).ANDROID_NDK }}
-      run: |
-        cd stunnel-${{ env.STUNNEL_VERSION }}
-
-        export CC=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang
-        export CXX=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++
-
-        ./configure \
-            --host=arm-linux-androideabi \
-            --prefix=/usr/local/stunnel \
-            --disable-fips \
-            --disable-systemd \
-            --disable-libwrap \
-            --enable-static \
-            --disable-shared \
-            --with-ssl=/usr/local/ssl \
-            CFLAGS="-O2" \
-            LDFLAGS="-static"
-
-        make -j$(nproc)
-        make install
-
-        echo "status=success" >> $GITHUB_OUTPUT
+      - name: Compile Stunnel
+        id: compile_stunnel
+        if: steps.download_stunnel.outputs.status == 'success' && steps.compile_openssl.outputs.status == 'success' && !cancelled()
+        env:
+          ANDROID_NDK: ${{ fromJSON(matrix.info).ANDROID_NDK }}
+        run: |
+          cd stunnel-${{ env.STUNNEL_VERSION }}
+          export CC=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang
+          export CXX=$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++
+          ./configure \
+              --host=arm-linux-androideabi \
+              --prefix=/usr/local/stunnel \
+              --disable-fips \
+              --disable-systemd \
+              --disable-libwrap \
+              --enable-static \
+              --disable-shared \
+              --with-ssl=/usr/local/ssl \
+              CFLAGS="-O2" \
+              LDFLAGS="-static"
+          make -j$(nproc)
+          make install
+          echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Generate release tag
         id: tag
